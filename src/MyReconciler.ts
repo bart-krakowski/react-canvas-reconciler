@@ -3,61 +3,58 @@ import ReactReconciler, {
 } from "react-reconciler";
 import { DefaultEventPriority } from "react-reconciler/constants";
 
+function addClickIndicator(x: number, y: number, container: Container) {
+  const { ctx } = container;
+  const dpr = window.devicePixelRatio || 1;
+  
+  ctx.save();
+  ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
+  ctx.beginPath();
+  ctx.arc(x / dpr, y / dpr, 5, 0, 2 * Math.PI);
+  ctx.fill();
+  ctx.restore();
+
+  console.log('Adding click indicator:', { x, y, adjustedX: x / dpr, adjustedY: y / dpr });
+
+  // Usuń wskaźnik po 1 sekundzie
+  setTimeout(() => {
+    renderAll(container);
+  }, 1000);
+}
+
+
 const renderInstanceOrText = (
   instanceOrText: Instance | TextInstance,
   container: Container
 ) => {
   const { ctx } = container;
-  const ratio = window.devicePixelRatio || 1;
+  const dpr = window.devicePixelRatio || 1;
 
   ctx.save();
 
-  if ("type" in instanceOrText) {
+  if ('type' in instanceOrText) {
     const { type, props } = instanceOrText;
     switch (type) {
       case "rect":
         ctx.fillStyle = props.color || "black";
-        ctx.fillRect(
-          props.x * ratio,
-          props.y * ratio,
-          props.width * ratio,
-          props.height * ratio
-        );
+        ctx.fillRect(props.x, props.y, props.width, props.height);
         break;
       case "circle":
         ctx.fillStyle = props.color || "black";
         ctx.beginPath();
-        ctx.arc(
-          props.x * ratio,
-          props.y * ratio,
-          props.radius * ratio,
-          0,
-          2 * Math.PI
-        );
+        ctx.arc(props.x, props.y, props.radius, 0, 2 * Math.PI);
         ctx.fill();
-        break;
-      case "text":
-        ctx.fillStyle = props.color || "black";
-        ctx.font = props.font || "12px Arial";
-        ctx.fillText(
-          props.text,
-          props.x * ratio,
-          props.y * ratio
-        );
         break;
     }
     instanceOrText.children.forEach((child) =>
       renderInstanceOrText(child, container)
     );
   } else {
-    // TextInstance
     ctx.fillStyle = instanceOrText.color;
-    ctx.font = instanceOrText.font;
-    ctx.fillText(
-      instanceOrText.text,
-      instanceOrText.x * ratio,
-      instanceOrText.y * ratio
-    );
+    // Skalujemy rozmiar czcionki
+    const fontSize = parseFloat(instanceOrText.font);
+    ctx.font = `${fontSize}px ${instanceOrText.font.split('px')[1]}`;
+    ctx.fillText(instanceOrText.text, instanceOrText.x, instanceOrText.y);
   }
 
   ctx.restore();
@@ -74,12 +71,9 @@ const handleClick = (
   }
 };
 
-const hitTest = (
-  container: Container,
-  x: number,
-  y: number
-): Instance | null => {
+const hitTest = (container: Container, x: number, y: number): Instance | null => {
   let topHit: Instance | null = null;
+  const dpr = window.devicePixelRatio || 1;
 
   const testShape = (instance: Instance) => {
     const { type, props } = instance;
@@ -87,17 +81,13 @@ const hitTest = (
 
     switch (type) {
       case "rect":
-        hit =
-          x >= props.x &&
-          x <= props.x + props.width &&
-          y >= props.y &&
-          y <= props.y + props.height;
+        hit = x >= props.x && x <= props.x + props.width * dpr && 
+              y >= props.y && y <= props.y + props.height * dpr;
         break;
       case "circle":
         const dx = x - props.x;
         const dy = y - props.y;
-        hit =
-          dx * dx + dy * dy <= props.radius * props.radius;
+        hit = dx * dx + dy * dy <= (props.radius * dpr) * (props.radius * dpr);
         break;
     }
 
@@ -438,22 +428,28 @@ const renderInstance = (
 
 const reconciler = ReactReconciler(hostConfig);
 
-const resizeCanvas = (canvas: HTMLCanvasElement) => {
+function resizeCanvas(canvas: HTMLCanvasElement) {
   const { width, height } = canvas.getBoundingClientRect();
-  if (canvas.width !== width || canvas.height !== height) {
-    const { devicePixelRatio: ratio = 1 } = window;
-    canvas.width = width * ratio;
-    canvas.height = height * ratio;
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${height}px`;
-    const ctx = canvas.getContext("2d");
-    if (ctx) {
-      ctx.scale(ratio, ratio);
-    }
-    return true;
+  const dpr = window.devicePixelRatio || 1;
+  
+  canvas.width = width * dpr;
+  canvas.height = height * dpr;
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
+  
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.scale(dpr, dpr);
   }
-  return false;
-};
+  
+  console.log('Canvas resized:', { 
+    width, 
+    height, 
+    dpr, 
+    canvasWidth: canvas.width, 
+    canvasHeight: canvas.height 
+  });
+}
 
 export const render = (
   element: React.ReactElement,
@@ -495,16 +491,70 @@ export const render = (
 
   canvas.addEventListener("click", (event) => {
     const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    
-    const x = (event.clientX - rect.left) * scaleX;
-    const y = (event.clientY - rect.top) * scaleY;
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
   
-    console.log('Click detected:', { x, y, scaleX, scaleY, canvasWidth: canvas.width, canvasHeight: canvas.height });
+    console.log('Click detected:', { 
+      clientX: event.clientX, 
+      clientY: event.clientY, 
+      rectLeft: rect.left, 
+      rectTop: rect.top,
+      x, 
+      y 
+    });
   
+    addClickIndicator(x, y, container);
     handleClick(container, x, y);
   });
+  
+  function addClickIndicator(x: number, y: number, container: Container) {
+    const { ctx } = container;
+    
+    ctx.save();
+    ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
+    ctx.beginPath();
+    ctx.arc(x, y, 5, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.restore();
+  
+    console.log('Adding click indicator:', { x, y });
+  
+    setTimeout(() => {
+      renderAll(container);
+    }, 1000);
+  };
+  
+  // W funkcji hitTest
+  const hitTest = (container: Container, x: number, y: number): Instance | null => {
+    let topHit: Instance | null = null;
+  
+    const testShape = (instance: Instance) => {
+      const { type, props } = instance;
+      let hit = false;
+  
+      switch (type) {
+        case "rect":
+          hit = x >= props.x && x <= props.x + props.width && 
+                y >= props.y && y <= props.y + props.height;
+          break;
+        case "circle":
+          const dx = x - props.x;
+          const dy = y - props.y;
+          hit = dx * dx + dy * dy <= props.radius * props.radius;
+          break;
+      }
+  
+      if (hit) {
+        topHit = instance;
+      }
+  
+      instance.children.forEach(testShape);
+    };
+  
+    container.children.forEach(testShape);
+  
+    return topHit;
+  };
 
   return root;
 };
