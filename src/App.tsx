@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-
 import './App.css';
+import { Canvas } from './MyReconciler';
 
 type Shape = Rect | Circle;
 
@@ -23,14 +23,6 @@ interface Circle {
   color: string;
 }
 
-const Rect: React.FC<Omit<Rect, 'type'> & { onClick: () => void }> = (props) => {
-  return <canvas-rect {...props} />;
-};
-
-const Circle: React.FC<Omit<Circle, 'type'> & { onClick: () => void }> = (props) => {
-  return <canvas-circle {...props} />;
-};
-
 const App: React.FC = () => {
   const [shapes, setShapes] = useState<Shape[]>([
     { type: 'rect', id: 1, x: 10, y: 10, width: 50, height: 50, color: 'red' },
@@ -41,7 +33,6 @@ const App: React.FC = () => {
   const handleClick = (id: number) => {
     setCount((prev) => prev - 1);
     setShapes(shapes.filter(shape => {
-      console.log(shape.id, id);
       return shape.id !== id;
     }));
   };
@@ -50,22 +41,22 @@ const App: React.FC = () => {
     setCount((prev) => prev + 1);
     const newShape: Shape = Math.random() > 0.5
       ? {
-          type: 'rect',
-          id: Date.now(),
-          x: Math.random() * 280,
-          y: Math.random() * 280,
-          width: 50,
-          height: 50,
-          color: `rgb(${Math.random()*255},${Math.random()*255},${Math.random()*255})`,
-        }
+        type: 'rect',
+        id: Date.now(),
+        x: Math.random() * 1000,
+        y: Math.random() * 1000,
+        width: 50,
+        height: 50,
+        color: `rgb(${Math.random() * 255},${Math.random() * 255},${Math.random() * 255})`,
+      }
       : {
-          type: 'circle',
-          id: Date.now(),
-          x: Math.random() * 280,
-          y: Math.random() * 280,
-          radius: 25,
-          color: `rgb(${Math.random()*255},${Math.random()*255},${Math.random()*255})`,
-        };
+        type: 'circle',
+        id: Date.now(),
+        x: Math.random() * 1000,
+        y: Math.random() * 1000,
+        radius: 25,
+        color: `rgb(${Math.random() * 255},${Math.random() * 255},${Math.random() * 255})`,
+      };
     setShapes([...shapes, newShape]);
   };
 
@@ -74,7 +65,7 @@ const App: React.FC = () => {
       {shapes.map(shape => {
         if (shape.type === 'rect') {
           return (
-            <Rect
+            <canvasRect
               key={shape.id}
               id={shape.id}
               x={shape.x}
@@ -87,7 +78,7 @@ const App: React.FC = () => {
           );
         } else {
           return (
-            <Circle
+            <canvasCircle
               key={shape.id}
               id={shape.id}
               x={shape.x}
@@ -99,11 +90,14 @@ const App: React.FC = () => {
           );
         }
       })}
-      <canvas-rect x={0} y={290} width={300} height={20} color="lightgray" />
-      <text x={10} 
-        y={305} 
-        text={count.toString()}
-        font="16px Arial"  />
+      <canvasRect x={10} y={300} width={500} height={20} color="green">
+        <canvasText
+          x={0}
+          y={15}
+          text={count.toString()}
+          font="16px Arial"
+        />
+      </canvasRect>
     </>
   );
 };

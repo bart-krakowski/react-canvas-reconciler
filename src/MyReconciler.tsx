@@ -1,6 +1,8 @@
+import React, { useRef, useEffect } from 'react';
 import ReactReconciler, { HostConfig } from "react-reconciler";
 import { DefaultEventPriority } from "react-reconciler/constants";
 
+// Shape types and props
 interface BaseShape {
   color?: string;
   onClick?: () => void;
@@ -37,7 +39,7 @@ type Container = {
   children: Instance[];
 };
 type Instance = {
-  type: Type;
+  type: `canvas${Capitalize<Type>}`;
   props: Props;
   parent: Instance | null;
   children: Instance[];
@@ -68,14 +70,6 @@ function addClickIndicator(x: number, y: number, container: Container) {
   }, 1000);
 }
 
-const renderAll = (container: Container) => {
-  const { ctx, canvas } = container;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  container.children.forEach((child) =>
-    renderInstance(child, container)
-  );
-};
-
 const handleClick = (
   container: Container,
   x: number,
@@ -91,23 +85,24 @@ const hitTest = (container: Container, x: number, y: number): Instance | null =>
   let topHit: Instance | null = null;
   const dpr = window.devicePixelRatio || 1;
 
-  const testShape = (instance: Instance) => {
+  const testShape = (instance: Instance, parentX = 0, parentY = 0) => {
     const { type, props } = instance;
+    const absX = (parentX + props.x) * dpr;
+    const absY = (parentY + props.y) * dpr;
     let hit = false;
 
     switch (type) {
-      case "rect":
-        hit = x >= props.x && x <= props.x + props.width * dpr && 
-              y >= props.y && y <= props.y + props.height * dpr;
+      case "canvasRect":
+        hit = x >= absX && x <= absX + props.width * dpr && 
+              y >= absY && y <= absY + props.height * dpr;
         break;
-      case "circle":
-        const dx = x - props.x;
-        const dy = y - props.y;
+      case "canvasCircle":
+        const dx = x - absX;
+        const dy = y - absY;
         hit = dx * dx + dy * dy <= (props.radius * dpr) * (props.radius * dpr);
         break;
-      case "text":
-        // Simple hit test for text (treat as a point)
-        hit = Math.abs(x - props.x) < 10 && Math.abs(y - props.y) < 10;
+      case "canvasText":
+        hit = Math.abs(x - absX) < 10 && Math.abs(y - absY) < 10;
         break;
     }
 
@@ -115,12 +110,75 @@ const hitTest = (container: Container, x: number, y: number): Instance | null =>
       topHit = instance;
     }
 
-    instance.children.forEach(testShape);
+    instance.children.forEach(child => testShape(child, props.x + parentX, props.y + parentY));
   };
 
-  container.children.forEach(testShape);
+  container.children.forEach(child => testShape(child));
 
   return topHit;
+};
+
+const renderInstance = (
+  instance: Instance,
+  container: Container,
+  parentX = 0,
+  parentY = 0
+) => {
+  const { ctx } = container;
+  const { type, props } = instance;
+  const ratio = window.devicePixelRatio || 1;
+
+  const x = (parentX + props.x) * ratio;
+  const y = (parentY + props.y) * ratio;
+
+  ctx.save();
+
+  switch (type) {
+    case "canvasRect":
+      ctx.fillStyle = props.color || "black";
+      ctx.fillRect(
+        x,
+        y,
+        props.width * ratio,
+        props.height * ratio
+      );
+      break;
+    case "canvasCircle":
+      ctx.fillStyle = props.color || "black";
+      ctx.beginPath();
+      ctx.arc(
+        x,
+        y,
+        props.radius * ratio,
+        0,
+        2 * Math.PI
+      );
+      ctx.fill();
+      break;
+    case "canvasText":
+      ctx.fillStyle = props.color || "black";
+      ctx.font = props.font || "12px Arial";
+      ctx.fillText(
+        props.text,
+        x,
+        y
+      );
+      break;
+  }
+
+  ctx.restore();
+
+  instance.children.forEach((child) =>
+    renderInstance(child, container, parentX + props.x, parentY + props.y)
+  );
+};
+
+const renderAll = (container: Container) => {
+  const { ctx, canvas } = container;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  container.children.forEach((child) =>
+    renderInstance(child, container)
+  );
 };
 
 const hostConfig: HostConfig<
@@ -156,9 +214,7 @@ const hostConfig: HostConfig<
   },
 
   createTextInstance() {
-    throw new Error(
-      "Canvas renderer does not support text instances"
-    );
+    throw new Error("Canvas renderer does not support text instances");
   },
 
   appendInitialChild(parentInstance, child) {
@@ -245,7 +301,7 @@ const hostConfig: HostConfig<
   appendChildToContainer(container, child) {
     if (typeof child === "object") {
       container.children.push(child);
-      renderInstance(child, container);
+      renderAll(container);
     }
   },
 
@@ -254,8 +310,7 @@ const hostConfig: HostConfig<
       typeof child === "object" &&
       typeof beforeChild === "object"
     ) {
-      const index =
-        parentInstance.children.indexOf(beforeChild);
+      const index = parentInstance.children.indexOf(beforeChild);
       if (index !== -1) {
         parentInstance.children.splice(index, 0, child);
         child.parent = parentInstance;
@@ -271,7 +326,7 @@ const hostConfig: HostConfig<
       const index = container.children.indexOf(beforeChild);
       if (index !== -1) {
         container.children.splice(index, 0, child);
-        renderInstance(child, container);
+        renderAll(container);
       }
     }
   },
@@ -303,9 +358,7 @@ const hostConfig: HostConfig<
   },
 
   commitTextUpdate() {
-    throw new Error(
-      "Canvas renderer does not support text instances"
-    );
+    throw new Error("Canvas renderer does not support text instances");
   },
 
   clearContainer(container) {
@@ -319,70 +372,11 @@ const hostConfig: HostConfig<
   },
 
   detachDeletedInstance() {},
-
   beforeActiveInstanceBlur() {},
-
   afterActiveInstanceBlur() {},
-
   prepareScopeUpdate() {},
-
-  getInstanceFromScope() {
-    return null;
-  },
-
-  getInstanceFromNode() {
-    return null;
-  },
-};
-
-const renderInstance = (
-  instance: Instance,
-  container: Container
-) => {
-  const { ctx } = container;
-  const { type, props } = instance;
-  const ratio = window.devicePixelRatio || 1;
-
-  ctx.save();
-
-  switch (type) {
-    case "rect":
-      ctx.fillStyle = props.color || "black";
-      ctx.fillRect(
-        props.x * ratio,
-        props.y * ratio,
-        props.width * ratio,
-        props.height * ratio
-      );
-      break;
-    case "circle":
-      ctx.fillStyle = props.color || "black";
-      ctx.beginPath();
-      ctx.arc(
-        props.x * ratio,
-        props.y * ratio,
-        props.radius * ratio,
-        0,
-        2 * Math.PI
-      );
-      ctx.fill();
-      break;
-    case "text":
-      ctx.fillStyle = props.color || "black";
-      ctx.font = props.font || "12px Arial";
-      ctx.fillText(
-        props.text,
-        props.x * ratio,
-        props.y * ratio
-      );
-      break;
-  }
-
-  ctx.restore();
-
-  instance.children.forEach((child) =>
-    renderInstance(child, container)
-  );
+  getInstanceFromScope() { return null; },
+  getInstanceFromNode() { return null; },
 };
 
 const reconciler = ReactReconciler(hostConfig);
@@ -407,6 +401,7 @@ function resizeCanvas(canvas: HTMLCanvasElement) {
   }
 }
 
+// Render function
 export const render = (
   element: React.ReactElement,
   canvas: HTMLCanvasElement
@@ -454,4 +449,25 @@ export const render = (
   });
 
   return root;
+};
+
+interface CanvasProps {
+  width?: number;
+  height?: number;
+  children?: React.ReactNode;
+}
+
+export const Canvas: React.FC<CanvasProps> = ({ width, height, children }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    if (canvasRef.current) {
+      render(
+        <React.Fragment>{children}</React.Fragment>,
+        canvasRef.current
+      );
+    }
+  }, [children]);
+
+  return <canvas ref={canvasRef} width={width} height={height} />;
 };

@@ -1,10 +1,11 @@
-import { CircleProps, RectProps } from "./MyReconciler";
+import { CircleProps, RectProps, TextProps } from "./MyReconciler";
 
 declare global {
   namespace JSX {
     interface IntrinsicElements {
-      'canvas-rect': NodeProps<RectProps>;
-      'canvas-circle': NodeProps<CircleProps>;
+      'canvasRect': NodeProps<RectProps>;
+      'canvasCircle': NodeProps<CircleProps>;
+      'canvasText': NodeProps<TextProps>;
     }
   }
 }
