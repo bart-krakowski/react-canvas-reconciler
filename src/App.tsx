@@ -23,7 +23,6 @@ interface Circle {
   color: string;
 }
 
-// Custom components for shapes
 const Rect: React.FC<Omit<Rect, 'type'> & { onClick: () => void }> = (props) => {
   return <rect {...props} />;
 };
@@ -37,8 +36,10 @@ const App: React.FC = () => {
     { type: 'rect', id: 1, x: 10, y: 10, width: 50, height: 50, color: 'red' },
     { type: 'circle', id: 2, x: 100, y: 100, radius: 25, color: 'blue' },
   ]);
+  const [count, setCount] = useState(0);
 
   const handleClick = (id: number) => {
+    setCount((prev) => prev - 1);
     setShapes(shapes.filter(shape => {
       console.log(shape.id, id);
       return shape.id !== id;
@@ -46,6 +47,7 @@ const App: React.FC = () => {
   };
 
   const addShape = () => {
+    setCount((prev) => prev + 1);
     const newShape: Shape = Math.random() > 0.5
       ? {
           type: 'rect',
@@ -80,7 +82,7 @@ const App: React.FC = () => {
               width={shape.width}
               height={shape.height}
               color={shape.color}
-              onClick={handleClick}
+              onClick={() => handleClick(shape.id)}
             />
           );
         } else {
@@ -98,7 +100,10 @@ const App: React.FC = () => {
         }
       })}
       <rect x={0} y={290} width={300} height={20} color="lightgray" />
-      <text x={10} y={300} color="black" onClick={addShape} text="text" font="Arial" />
+      <text x={10} 
+        y={305} 
+        text={count.toString()}
+        font="16px Arial"  />
     </>
   );
 };
