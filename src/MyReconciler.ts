@@ -8,24 +8,26 @@ interface BaseShape {
   y: number;
 }
 
-interface RectProps extends BaseShape {
+export interface RectProps extends BaseShape {
   type: "rect";
   width: number;
   height: number;
 }
 
-interface CircleProps extends BaseShape {
+export interface CircleProps extends BaseShape {
   type: "circle";
   radius: number;
 }
 
-interface TextProps extends BaseShape {
+export interface TextProps extends BaseShape {
   type: "text";
   text: string;
   font?: string;
 }
 
 type ShapeProps = RectProps | CircleProps | TextProps;
+
+export type NodeProps<T extends ShapeProps> = Omit<T, "type">;
 
 type Type = ShapeProps["type"];
 type Props = ShapeProps;

@@ -24,11 +24,11 @@ interface Circle {
 }
 
 const Rect: React.FC<Omit<Rect, 'type'> & { onClick: () => void }> = (props) => {
-  return <rect {...props} />;
+  return <canvas-rect {...props} />;
 };
 
 const Circle: React.FC<Omit<Circle, 'type'> & { onClick: () => void }> = (props) => {
-  return <circle {...props} />;
+  return <canvas-circle {...props} />;
 };
 
 const App: React.FC = () => {
@@ -99,7 +99,7 @@ const App: React.FC = () => {
           );
         }
       })}
-      <rect x={0} y={290} width={300} height={20} color="lightgray" />
+      <canvas-rect x={0} y={290} width={300} height={20} color="lightgray" />
       <text x={10} 
         y={305} 
         text={count.toString()}
