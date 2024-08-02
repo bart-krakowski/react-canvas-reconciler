@@ -1,8 +1,17 @@
-import React, { useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, FC, ReactNode } from 'react';
 import ReactReconciler, { HostConfig, OpaqueRoot } from "react-reconciler";
 import { DefaultEventPriority } from "react-reconciler/constants";
 
-// Shape types and props
+type Canvas = HTMLCanvasElement;
+
+interface RootState {
+  canvas: Canvas;
+  ctx: CanvasRenderingContext2D;
+  children: Instance[];
+  dpr: number;
+  invalidate: () => void;
+}
+
 interface BaseShape {
   color?: string;
   onClick?: () => void;
@@ -33,11 +42,7 @@ export type NodeProps<T extends ShapeProps> = Omit<T, "type">;
 
 type Type = `canvas${Capitalize<ShapeProps["type"]>}`;
 type Props = ShapeProps;
-type Container = {
-  canvas: HTMLCanvasElement;
-  ctx: CanvasRenderingContext2D;
-  children: Instance[];
-};
+type Container = RootState;
 type Instance = {
   type: Type;
   props: Props;
@@ -53,6 +58,27 @@ type UpdatePayload = Props;
 type ChildSet = never;
 type TimeoutHandle = number;
 type NoTimeout = -1;
+
+function resizeCanvas(canvas: HTMLCanvasElement, state: RootState) {
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  const dpr = window.devicePixelRatio || 1;
+
+  canvas.width = width * dpr;
+  canvas.height = height * dpr;
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
+
+  state.dpr = dpr;
+  state.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function getClickCoordinates(canvas: HTMLCanvasElement, event: MouseEvent, dpr: number): { x: number, y: number } {
+  const rect = canvas.getBoundingClientRect();
+  const x = (event.clientX - rect.left) * (canvas.width / rect.width / dpr);
+  const y = (event.clientY - rect.top) * (canvas.height / rect.height / dpr);
+  return { x, y };
+}
 
 function addClickIndicator(x: number, y: number, container: Container) {
   const { ctx } = container;
@@ -200,10 +226,13 @@ const renderInstance = (
   );
 };
 
-
 const renderAll = (container: Container) => {
   const { ctx, canvas } = container;
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.restore();
+  
   container.children.forEach((child) =>
     renderInstance(child, container)
   );
@@ -409,130 +438,94 @@ const hostConfig: HostConfig<
 
 const reconciler = ReactReconciler(hostConfig);
 
-function resizeCanvas(canvas: HTMLCanvasElement) {
-  const width = window.innerWidth;
-  const height = window.innerHeight;
-  const dpr = window.devicePixelRatio || 1;
-
-  canvas.width = width * dpr;
-  canvas.height = height * dpr;
-  canvas.style.width = `${width}px`;
-  canvas.style.height = `${height}px`;
-
+const createRoot = (canvas: Canvas) => {
   const ctx = canvas.getContext('2d');
-  if (ctx) {
-    ctx.scale(dpr, dpr);
-  }
-}
+  if (!ctx) throw new Error("Could not get 2D context from canvas");
 
-function getClickCoordinates(canvas: HTMLCanvasElement, event: MouseEvent): { x: number, y: number } {
-  const rect = canvas.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
-  
-  // Oblicz pozycję kliknięcia względem lewego górnego rogu canvasu
-  const canvasX = event.clientX - rect.left;
-  const canvasY = event.clientY - rect.top;
-  
-  // Przelicz pozycję na współrzędne logiczne
-  const x = canvasX / (rect.width / canvas.width * dpr);
-  const y = canvasY / (rect.height / canvas.height * dpr);
-  
-  return { x, y };
-}
 
-export const render = (
-  element: React.ReactElement,
-  canvas: HTMLCanvasElement
-) => {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) {
-    throw new Error("Could not get 2D context from canvas");
-  }
-
-  resizeCanvas(canvas);
-
-  const container: Container = {
+  const state: RootState = {
     canvas,
     ctx,
     children: [],
+    dpr,
+    invalidate: () => renderAll(state),
   };
 
   const root: OpaqueRoot = reconciler.createContainer(
-    container,
+    state,
     0,
     null,
     false,
     null,
-    "",
-    (error) => console.error(error),
+    '',
+    console.error,
     null
   );
 
-  reconciler.updateContainer(element, root, null, () => {
-    renderAll(container);
-  });
+  const handleResize = () => {
+    resizeCanvas(canvas, state);
+    renderAll(state);
+  };
 
-  window.addEventListener("resize", () => {
-    resizeCanvas(canvas);
-    renderAll(container);
-  });
+  const handleCanvasClick = (event: MouseEvent) => {
+    const { x, y } = getClickCoordinates(canvas, event, state.dpr);
+    addClickIndicator(x, y, state);
+    handleClick(state, x, y);
+  };
 
-  canvas.addEventListener("click", (event) => {
-    const { x, y } = getClickCoordinates(canvas, event);
-    addClickIndicator(x, y, container);
-    handleClick(container, x, y);
-  });
+  window.addEventListener('resize', handleResize);
+  canvas.addEventListener('click', handleCanvasClick);
 
-  return root;
+  handleResize();
+
+  return {
+    render: (element: ReactNode) => {
+      reconciler.updateContainer(element, root, null, () => {
+        renderAll(state);
+      });
+    },
+    unmount: () => {
+      reconciler.updateContainer(null, root, null, () => {});
+      window.removeEventListener('resize', handleResize);
+      canvas.removeEventListener('click', handleCanvasClick);
+    },
+  };
 };
 
-
 interface CanvasProps {
-  width?: number;
-  height?: number;
-  children?: React.ReactNode;
+  children?: ReactNode;
 }
 
-export const Canvas: React.FC<CanvasProps> = React.memo(({ children }) => {
+export const Canvas: FC<CanvasProps> = ({ children }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<OpaqueRoot>(null);
-
-  const renderCanvas = useCallback(() => {
-    if (canvasRef.current && !containerRef.current) {
-      containerRef.current = render(
-        <React.Fragment>{children}</React.Fragment>,
-        canvasRef.current
-      );
-    } else if (containerRef.current) {
-      reconciler.updateContainer(
-        <React.Fragment>{children}</React.Fragment>,
-        containerRef.current,
-        null,
-        () => {}
-      );
-    }
-  }, [children]);
+  const rootRef = useRef<ReturnType<typeof createRoot> | null>(null);
 
   useEffect(() => {
-    renderCanvas();
+    if (canvasRef.current && !rootRef.current) {
+      rootRef.current = createRoot(canvasRef.current);
+      rootRef.current.render(children);
+    }
 
     return () => {
-      if (containerRef.current) {
-        reconciler.updateContainer(null, containerRef.current, null, () => {});
-      }
+      rootRef.current?.unmount();
     };
-  }, [renderCanvas]);
+  }, []);
+
+  useEffect(() => {
+    rootRef.current?.render(children);
+  }, [children]);
 
   return (
-    <canvas 
-      ref={canvasRef} 
+    <canvas
+      ref={canvasRef}
       style={{
         position: 'fixed',
         top: 0,
         left: 0,
-        width: '100vw',
-        height: '100vh',
+        width: '100%',
+        height: '100%',
       }}
     />
   );
-});
+};
