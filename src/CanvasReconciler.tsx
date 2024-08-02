@@ -1,5 +1,5 @@
-import React, { useRef, useEffect } from 'react';
-import ReactReconciler, { HostConfig } from "react-reconciler";
+import React, { useRef, useEffect, useCallback } from 'react';
+import ReactReconciler, { HostConfig, OpaqueRoot } from "react-reconciler";
 import { DefaultEventPriority } from "react-reconciler/constants";
 
 // Shape types and props
@@ -31,7 +31,7 @@ type ShapeProps = RectProps | CircleProps | TextProps;
 
 export type NodeProps<T extends ShapeProps> = Omit<T, "type">;
 
-type Type = ShapeProps["type"];
+type Type = `canvas${Capitalize<ShapeProps["type"]>}`;
 type Props = ShapeProps;
 type Container = {
   canvas: HTMLCanvasElement;
@@ -39,7 +39,7 @@ type Container = {
   children: Instance[];
 };
 type Instance = {
-  type: `canvas${Capitalize<Type>}`;
+  type: Type;
   props: Props;
   parent: Instance | null;
   children: Instance[];
@@ -48,7 +48,7 @@ type TextInstance = never;
 type SuspenseInstance = never;
 type HydratableInstance = never;
 type PublicInstance = Instance;
-type HostContext = {};
+type HostContext = Record<string, never>;
 type UpdatePayload = Props;
 type ChildSet = never;
 type TimeoutHandle = number;
@@ -57,7 +57,7 @@ type NoTimeout = -1;
 function addClickIndicator(x: number, y: number, container: Container) {
   const { ctx } = container;
   const dpr = window.devicePixelRatio || 1;
-  
+
   ctx.save();
   ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
   ctx.beginPath();
@@ -81,6 +81,18 @@ const handleClick = (
   }
 };
 
+const isCircleProps = (_props: Props, type: Type): _props is CircleProps => {
+  return type === "canvasCircle";
+}
+
+const isRectProps = (_props: Props, type: Type): _props is RectProps => {
+  return type === "canvasRect";
+}
+
+const isTextProps = (_props: Props, type: Type): _props is TextProps => {
+  return type === "canvasText";
+}
+
 const hitTest = (container: Container, x: number, y: number): Instance | null => {
   let topHit: Instance | null = null;
   const dpr = window.devicePixelRatio || 1;
@@ -92,17 +104,25 @@ const hitTest = (container: Container, x: number, y: number): Instance | null =>
     let hit = false;
 
     switch (type) {
-      case "canvasRect":
-        hit = x >= absX && x <= absX + props.width * dpr && 
-              y >= absY && y <= absY + props.height * dpr;
+      case "canvasRect": {
+        if (isRectProps(props, type)) {
+          hit = x >= absX && x <= absX + props.width * dpr &&
+            y >= absY && y <= absY + props.height * dpr;
+        }
         break;
-      case "canvasCircle":
-        const dx = x - absX;
-        const dy = y - absY;
-        hit = dx * dx + dy * dy <= (props.radius * dpr) * (props.radius * dpr);
+      }
+      case "canvasCircle": {
+        if (isCircleProps(props, type)) {
+          const dx = x - absX;
+          const dy = y - absY;
+          hit = dx * dx + dy * dy <= (props.radius * dpr) * (props.radius * dpr);
+        }
         break;
+      }
       case "canvasText":
-        hit = Math.abs(x - absX) < 10 && Math.abs(y - absY) < 10;
+        if (isTextProps(props, type)) {
+          hit = Math.abs(x - absX) < 10 && Math.abs(y - absY) < 10;
+        }
         break;
     }
 
@@ -134,35 +154,46 @@ const renderInstance = (
   ctx.save();
 
   switch (type) {
-    case "canvasRect":
-      ctx.fillStyle = props.color || "black";
-      ctx.fillRect(
-        x,
-        y,
-        props.width * ratio,
-        props.height * ratio
-      );
+    case "canvasRect": {
+      if (isRectProps(props, type)) {
+        ctx.fillStyle = props.color || "black";
+        ctx.fillRect(
+          x,
+          y,
+          props.width * ratio,
+          props.height * ratio
+        );
+      }
+    }
       break;
-    case "canvasCircle":
-      ctx.fillStyle = props.color || "black";
-      ctx.beginPath();
-      ctx.arc(
-        x,
-        y,
-        props.radius * ratio,
-        0,
-        2 * Math.PI
-      );
-      ctx.fill();
+
+    case "canvasCircle": {
+      if (isCircleProps(props, type)) {
+        ctx.fillStyle = props.color || "black";
+        ctx.beginPath();
+        ctx.arc(
+          x,
+          y,
+          props.radius * ratio,
+          0,
+          2 * Math.PI
+        );
+        ctx.fill();
+      }
+    }
+
       break;
-    case "canvasText":
-      ctx.fillStyle = props.color || "black";
-      ctx.font = props.font || "12px Arial";
-      ctx.fillText(
-        props.text,
-        x,
-        y
-      );
+    case "canvasText": {
+      if (isTextProps(props, type)) {
+        ctx.fillStyle = props.color || "black";
+        ctx.font = props.font || "12px Arial";
+        ctx.fillText(
+          props.text,
+          x,
+          y
+        );
+      }
+    }
       break;
   }
 
@@ -261,7 +292,7 @@ const hostConfig: HostConfig<
     renderAll(containerInfo);
   },
 
-  preparePortalMount() {},
+  preparePortalMount() { },
 
   scheduleTimeout(
     fn: (...args: unknown[]) => unknown,
@@ -281,7 +312,7 @@ const hostConfig: HostConfig<
     typeof queueMicrotask === "function"
       ? queueMicrotask
       : typeof Promise !== "undefined"
-      ? (callback: () => void) =>
+        ? (callback: () => void) =>
           Promise.resolve(null)
             .then(callback)
             .catch((error) =>
@@ -289,7 +320,7 @@ const hostConfig: HostConfig<
                 throw error;
               })
             )
-      : setTimeout,
+        : setTimeout,
 
   appendChild(parentInstance, child) {
     if (typeof child === "object") {
@@ -371,10 +402,10 @@ const hostConfig: HostConfig<
     );
   },
 
-  detachDeletedInstance() {},
-  beforeActiveInstanceBlur() {},
-  afterActiveInstanceBlur() {},
-  prepareScopeUpdate() {},
+  detachDeletedInstance() { },
+  beforeActiveInstanceBlur() { },
+  afterActiveInstanceBlur() { },
+  prepareScopeUpdate() { },
   getInstanceFromScope() { return null; },
   getInstanceFromNode() { return null; },
 };
@@ -401,7 +432,6 @@ function resizeCanvas(canvas: HTMLCanvasElement) {
   }
 }
 
-// Render function
 export const render = (
   element: React.ReactElement,
   canvas: HTMLCanvasElement
@@ -419,7 +449,7 @@ export const render = (
     children: [],
   };
 
-  const root = reconciler.createContainer(
+  const root: OpaqueRoot = reconciler.createContainer(
     container,
     0,
     null,
@@ -443,7 +473,7 @@ export const render = (
     const rect = canvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
-  
+
     addClickIndicator(x, y, container);
     handleClick(container, x, y);
   });
@@ -457,17 +487,35 @@ interface CanvasProps {
   children?: React.ReactNode;
 }
 
-export const Canvas: React.FC<CanvasProps> = ({ width, height, children }) => {
+export const Canvas: React.FC<CanvasProps> = React.memo(({ width, height, children }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<OpaqueRoot>(null);
 
-  useEffect(() => {
-    if (canvasRef.current) {
-      render(
+  const renderCanvas = useCallback(() => {
+    if (canvasRef.current && !containerRef.current) {
+      containerRef.current = render(
         <React.Fragment>{children}</React.Fragment>,
         canvasRef.current
+      );
+    } else if (containerRef.current) {
+      reconciler.updateContainer(
+        <React.Fragment>{children}</React.Fragment>,
+        containerRef.current,
+        null,
+        () => {}
       );
     }
   }, [children]);
 
+  useEffect(() => {
+    renderCanvas();
+
+    return () => {
+      if (containerRef.current) {
+        reconciler.updateContainer(null, containerRef.current, null, () => {});
+      }
+    };
+  }, [renderCanvas]);
+
   return <canvas ref={canvasRef} width={width} height={height} />;
-};
+});

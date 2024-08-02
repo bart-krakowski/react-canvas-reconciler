@@ -1,4 +1,4 @@
-import { CircleProps, RectProps, TextProps } from "./MyReconciler";
+import { CircleProps, RectProps, TextProps } from "./CanvasReconciler";
 
 declare global {
   namespace JSX {

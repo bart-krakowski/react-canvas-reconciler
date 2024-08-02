@@ -1,104 +1,120 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import './App.css';
-import { Canvas } from './MyReconciler';
-
-type Shape = Rect | Circle;
-
-interface Rect {
-  type: 'rect';
-  id: number;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  color: string;
-}
-
-interface Circle {
-  type: 'circle';
-  id: number;
-  x: number;
-  y: number;
-  radius: number;
-  color: string;
-}
+import { Canvas } from './CanvasReconciler';
 
 const App: React.FC = () => {
-  const [shapes, setShapes] = useState<Shape[]>([
-    { type: 'rect', id: 1, x: 10, y: 10, width: 50, height: 50, color: 'red' },
-    { type: 'circle', id: 2, x: 100, y: 100, radius: 25, color: 'blue' },
-  ]);
-  const [count, setCount] = useState(0);
+  const [score, setScore] = useState(0);
+  const [position, setPosition] = useState({ x: 100, y: 100 });
+  const [shape, setShape] = useState('circle');
+  const [gameOver, setGameOver] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(30);
+  const moveIntervalRef = useRef<number | null>(null);
 
-  const handleClick = (id: number) => {
-    setCount((prev) => prev - 1);
-    setShapes(shapes.filter(shape => {
-      return shape.id !== id;
-    }));
-  };
+  const moveCircle = useCallback(() => {
+    setShape(Math.random() < 0.5 ? 'circle' : 'rect');
+    setPosition({
+      x: Math.random() * 300,
+      y: Math.random() * 300,
+    });
+  }, []);
 
-  const addShape = () => {
-    setCount((prev) => prev + 1);
-    const newShape: Shape = Math.random() > 0.5
-      ? {
-        type: 'rect',
-        id: Date.now(),
-        x: Math.random() * 1000,
-        y: Math.random() * 1000,
-        width: 50,
-        height: 50,
-        color: `rgb(${Math.random() * 255},${Math.random() * 255},${Math.random() * 255})`,
+  const resetMoveInterval = useCallback(() => {
+    if (moveIntervalRef.current) {
+      clearInterval(moveIntervalRef.current);
+    }
+    moveIntervalRef.current = setInterval(moveCircle, 2000);
+  }, [moveCircle]);
+
+  const handleCircleClick = useCallback(() => {
+    setScore((prevScore) => prevScore + 1);
+    moveCircle();
+    resetMoveInterval();
+  }, [moveCircle, resetMoveInterval]);
+
+  const handleRectClick = useCallback(() => {
+    setScore((prevScore) => prevScore - 1);
+    moveCircle();
+    resetMoveInterval();
+  }, [moveCircle, resetMoveInterval]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTimeLeft((prevTime) => {
+        if (prevTime <= 1) {
+          clearInterval(timer);
+          setGameOver(true);
+          return 0;
+        }
+        return prevTime - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!gameOver) {
+      resetMoveInterval();
+    } else if (moveIntervalRef.current) {
+      clearInterval(moveIntervalRef.current);
+    }
+
+    return () => {
+      if (moveIntervalRef.current) {
+        clearInterval(moveIntervalRef.current);
       }
-      : {
-        type: 'circle',
-        id: Date.now(),
-        x: Math.random() * 1000,
-        y: Math.random() * 1000,
-        radius: 25,
-        color: `rgb(${Math.random() * 255},${Math.random() * 255},${Math.random() * 255})`,
-      };
-    setShapes([...shapes, newShape]);
-  };
+    };
+  }, [gameOver, resetMoveInterval]);
 
   return (
-    <>
-      {shapes.map(shape => {
-        if (shape.type === 'rect') {
-          return (
-            <canvasRect
-              key={shape.id}
-              id={shape.id}
-              x={shape.x}
-              y={shape.y}
-              width={shape.width}
-              height={shape.height}
-              color={shape.color}
-              onClick={() => handleClick(shape.id)}
-            />
-          );
-        } else {
-          return (
-            <canvasCircle
-              key={shape.id}
-              id={shape.id}
-              x={shape.x}
-              y={shape.y}
-              radius={shape.radius}
-              color={shape.color}
-              onClick={addShape}
-            />
-          );
-        }
-      })}
-      <canvasRect x={10} y={300} width={500} height={20} color="green">
+    <Canvas>
+
+      <canvasRect x={0} y={0} width={500} height={100} color="green">
         <canvasText
-          x={0}
-          y={15}
-          text={count.toString()}
-          font="16px Arial"
+          x={10}
+          y={30}
+          text={`Score: ${score}`}
+          color="black"
+          font="20px Arial"
+        />
+        <canvasText
+          x={10}
+          y={60}
+          text={`Time: ${timeLeft}s`}
+          color="black"
+          font="20px Arial"
         />
       </canvasRect>
-    </>
+
+      <canvasRect x={0} y={100} width={500} height={500} color="lightgray">
+        {gameOver ? (
+          <canvasText
+            x={100}
+            y={200}
+            text={`Game Over! Final Score: ${score}`}
+            color="red"
+            font="24px Arial"
+          />
+        ) : shape === 'circle' ? (
+          <canvasCircle
+            x={position.x}
+            y={position.y}
+            radius={20}
+            color="blue"
+            onClick={handleCircleClick}
+          />
+        ) : (
+          <canvasRect
+            x={position.x}
+            y={position.y}
+            width={40}
+            height={40}
+            color="blue"
+            onClick={handleRectClick}
+          />
+        )}
+      </canvasRect>
+    </Canvas>
   );
 };
 
