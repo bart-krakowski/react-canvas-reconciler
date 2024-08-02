@@ -410,9 +410,8 @@ const hostConfig: HostConfig<
 const reconciler = ReactReconciler(hostConfig);
 
 function resizeCanvas(canvas: HTMLCanvasElement) {
-  const parent = canvas.parentElement;
-  const width = parent ? parent.clientWidth : window.innerWidth;
-  const height = parent ? parent.clientHeight : window.innerHeight;
+  const width = window.innerWidth;
+  const height = window.innerHeight;
   const dpr = window.devicePixelRatio || 1;
 
   canvas.width = width * dpr;
@@ -494,7 +493,7 @@ interface CanvasProps {
   children?: React.ReactNode;
 }
 
-export const Canvas: React.FC<CanvasProps> = React.memo(({ width, height, children }) => {
+export const Canvas: React.FC<CanvasProps> = React.memo(({ children }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<OpaqueRoot>(null);
 
@@ -524,5 +523,16 @@ export const Canvas: React.FC<CanvasProps> = React.memo(({ width, height, childr
     };
   }, [renderCanvas]);
 
-  return <canvas ref={canvasRef} width={width} height={height} />;
+  return (
+    <canvas 
+      ref={canvasRef} 
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+      }}
+    />
+  );
 });
