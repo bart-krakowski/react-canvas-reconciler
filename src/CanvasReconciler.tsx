@@ -56,12 +56,11 @@ type NoTimeout = -1;
 
 function addClickIndicator(x: number, y: number, container: Container) {
   const { ctx } = container;
-  const dpr = window.devicePixelRatio || 1;
 
   ctx.save();
   ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
   ctx.beginPath();
-  ctx.arc(x / dpr, y / dpr, 5, 0, 2 * Math.PI);
+  ctx.arc(x, y, 5, 0, 2 * Math.PI);
   ctx.fill();
   ctx.restore();
 
@@ -95,19 +94,18 @@ const isTextProps = (_props: Props, type: Type): _props is TextProps => {
 
 const hitTest = (container: Container, x: number, y: number): Instance | null => {
   let topHit: Instance | null = null;
-  const dpr = window.devicePixelRatio || 1;
 
   const testShape = (instance: Instance, parentX = 0, parentY = 0) => {
     const { type, props } = instance;
-    const absX = (parentX + props.x) * dpr;
-    const absY = (parentY + props.y) * dpr;
+    const absX = parentX + props.x;
+    const absY = parentY + props.y;
     let hit = false;
 
     switch (type) {
       case "canvasRect": {
         if (isRectProps(props, type)) {
-          hit = x >= absX && x <= absX + props.width * dpr &&
-            y >= absY && y <= absY + props.height * dpr;
+          hit = x >= absX && x <= absX + props.width &&
+            y >= absY && y <= absY + props.height;
         }
         break;
       }
@@ -115,7 +113,7 @@ const hitTest = (container: Container, x: number, y: number): Instance | null =>
         if (isCircleProps(props, type)) {
           const dx = x - absX;
           const dy = y - absY;
-          hit = dx * dx + dy * dy <= (props.radius * dpr) * (props.radius * dpr);
+          hit = dx * dx + dy * dy <= props.radius * props.radius;
         }
         break;
       }
@@ -130,7 +128,7 @@ const hitTest = (container: Container, x: number, y: number): Instance | null =>
       topHit = instance;
     }
 
-    instance.children.forEach(child => testShape(child, props.x + parentX, props.y + parentY));
+    instance.children.forEach(child => testShape(child, absX, absY));
   };
 
   container.children.forEach(child => testShape(child));
@@ -146,10 +144,9 @@ const renderInstance = (
 ) => {
   const { ctx } = container;
   const { type, props } = instance;
-  const ratio = window.devicePixelRatio || 1;
 
-  const x = (parentX + props.x) * ratio;
-  const y = (parentY + props.y) * ratio;
+  const x = parentX + props.x;
+  const y = parentY + props.y;
 
   ctx.save();
 
@@ -160,8 +157,8 @@ const renderInstance = (
         ctx.fillRect(
           x,
           y,
-          props.width * ratio,
-          props.height * ratio
+          props.width,
+          props.height
         );
       }
     }
@@ -174,14 +171,13 @@ const renderInstance = (
         ctx.arc(
           x,
           y,
-          props.radius * ratio,
+          props.radius,
           0,
           2 * Math.PI
         );
         ctx.fill();
       }
     }
-
       break;
     case "canvasText": {
       if (isTextProps(props, type)) {
@@ -200,9 +196,10 @@ const renderInstance = (
   ctx.restore();
 
   instance.children.forEach((child) =>
-    renderInstance(child, container, parentX + props.x, parentY + props.y)
+    renderInstance(child, container, x, y)
   );
 };
+
 
 const renderAll = (container: Container) => {
   const { ctx, canvas } = container;
@@ -413,9 +410,6 @@ const hostConfig: HostConfig<
 const reconciler = ReactReconciler(hostConfig);
 
 function resizeCanvas(canvas: HTMLCanvasElement) {
-  canvas.removeAttribute('width');
-  canvas.removeAttribute('height');
-
   const parent = canvas.parentElement;
   const width = parent ? parent.clientWidth : window.innerWidth;
   const height = parent ? parent.clientHeight : window.innerHeight;
@@ -430,6 +424,21 @@ function resizeCanvas(canvas: HTMLCanvasElement) {
   if (ctx) {
     ctx.scale(dpr, dpr);
   }
+}
+
+function getClickCoordinates(canvas: HTMLCanvasElement, event: MouseEvent): { x: number, y: number } {
+  const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  
+  // Oblicz pozycję kliknięcia względem lewego górnego rogu canvasu
+  const canvasX = event.clientX - rect.left;
+  const canvasY = event.clientY - rect.top;
+  
+  // Przelicz pozycję na współrzędne logiczne
+  const x = canvasX / (rect.width / canvas.width * dpr);
+  const y = canvasY / (rect.height / canvas.height * dpr);
+  
+  return { x, y };
 }
 
 export const render = (
@@ -470,16 +479,14 @@ export const render = (
   });
 
   canvas.addEventListener("click", (event) => {
-    const rect = canvas.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
-
+    const { x, y } = getClickCoordinates(canvas, event);
     addClickIndicator(x, y, container);
     handleClick(container, x, y);
   });
 
   return root;
 };
+
 
 interface CanvasProps {
   width?: number;
